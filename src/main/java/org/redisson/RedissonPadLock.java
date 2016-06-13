@@ -20,8 +20,10 @@
  */
 package org.redisson;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
@@ -29,6 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.redisson.client.RedisException;
 import org.redisson.client.codec.LongCodec;
 import org.redisson.client.protocol.RedisCommands;
 import org.redisson.client.protocol.RedisStrictCommand;
@@ -221,14 +224,15 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	}
     }
 
-    void cancelExpirationRenewal() {
+    protected void cancelExpirationRenewal() {
 	Timeout task = expirationRenewalMap.remove(getEntryName());
 	if (task != null) {
 	    task.cancel();
 	}
     }
 
-    <T> Future<T> tryLockInnerAsync(long leaseTime, TimeUnit unit, String[] ownerKeys, RedisStrictCommand<T> command) {
+    protected <T> Future<T> tryLockInnerAsync(long leaseTime, TimeUnit unit, String[] ownerKeys,
+	    RedisStrictCommand<T> command) {
 	internalLockLeaseTime = unit.toMillis(leaseTime);
 	final int keyArgIdxOffset = 2;
 	StringBuilder script = new StringBuilder();
@@ -256,8 +260,12 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	script.append("end; ");
 
 	script.append("return redis.call('pttl', KEYS[1]); ");
+
+	List<String> params = new ArrayList<>();
+	params.add(String.valueOf(internalLockLeaseTime));
+	params.addAll(Arrays.asList(ownerKeys));
 	return commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE, command, script.toString(),
-		Collections.<Object> singletonList(getName()), internalLockLeaseTime, ownerKeys);
+		Collections.<Object> singletonList(getName()), params.toArray());
     }
 
     @Override
@@ -330,7 +338,15 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 
     @Override
     public void unlock(String[] ownerKeys) {
-	get(unlockAsync(ownerKeys));
+	try {
+	    get(unlockAsync(ownerKeys));
+	} catch (RedisException re) {
+	    if (re.getCause() != null && re.getCause() instanceof IllegalMonitorStateException) {
+		throw (IllegalMonitorStateException) re.getCause();
+	    } else {
+		throw re;
+	    }
+	}
     }
 
     @Override
@@ -338,7 +354,7 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	get(forceUnlockAsync());
     }
 
-    Future<Boolean> forceUnlockAsync() {
+    public Future<Boolean> forceUnlockAsync() {
 	cancelExpirationRenewal();
 	StringBuilder script = new StringBuilder();
 	script.append("if (redis.call('del', KEYS[1]) == 1) then ");
@@ -360,14 +376,12 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 
     @Override
     public boolean isOwner(String ownerKey) {
-	return commandExecutor.read(getName(), LongCodec.INSTANCE, RedisCommands.HEXISTS, getName(),
-		ownerKey);
+	return commandExecutor.read(getName(), LongCodec.INSTANCE, RedisCommands.HEXISTS, getName(), ownerKey);
     }
 
     @Override
     public int getHoldCount(String ownerKey) {
-	Long res = commandExecutor.read(getName(), LongCodec.INSTANCE, RedisCommands.HGET, getName(),
-		ownerKey);
+	Long res = commandExecutor.read(getName(), LongCodec.INSTANCE, RedisCommands.HGET, getName(), ownerKey);
 	if (res == null) {
 	    return 0;
 	}
@@ -386,7 +400,6 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	script.append("redis.call('publish', KEYS[2], ARGV[1]); ");
 	script.append("return 1; ");
 	script.append("end; ");
-
 	script.append("if (");
 	for (int i = 0; i < ownerKeys.length; i++) {
 	    if (i > 0) {
@@ -397,11 +410,10 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	script.append(") then ");
 	script.append("return nil; ");
 	script.append("end; ");
-
 	script.append("local counter = 0; ");
 	for (int i = 0; i < ownerKeys.length; i++) {
 	    script.append("if (redis.call('hexists', KEYS[1], ARGV[").append(i + keyArgIdxOffset)
-		    .append("], -1) == 1) then ");
+		    .append("]) == 1) then ");
 	    script.append("if (redis.call('hincrby', KEYS[1], ARGV[").append(i + keyArgIdxOffset)
 		    .append("], -1) > 0) then ");
 	    script.append("counter = counter + 1; ");
@@ -416,13 +428,17 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	script.append("redis.call('publish', KEYS[2], ARGV[1]); ");
 	script.append("return 1; ");
 	script.append("end; ");
-	
+	script.append("return nil; ");
+
+	List<String> params = new ArrayList<>();
+	params.add(String.valueOf(LockPubSub.unlockMessage));
+	params.add(String.valueOf(internalLockLeaseTime));
+	params.addAll(Arrays.asList(ownerKeys));
+
 	final Promise<Void> result = newPromise();
 	Future<Boolean> future = commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE,
-		RedisCommands.EVAL_BOOLEAN,
-		script.toString(),
-		Arrays.<Object> asList(getName(), getChannelName()), LockPubSub.unlockMessage, internalLockLeaseTime,
-		ownerKeys);
+		RedisCommands.EVAL_BOOLEAN, script.toString(), Arrays.<Object> asList(getName(), getChannelName()),
+		params.toArray());
 
 	future.addListener(new FutureListener<Boolean>() {
 	    @Override

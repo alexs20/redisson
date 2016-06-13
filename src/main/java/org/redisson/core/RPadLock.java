@@ -28,7 +28,7 @@ import io.netty.util.concurrent.Future;
 /**
  * Distributed implementation of thread detached Lock similar to
  * {@link java.util.concurrent.locks.Lock} but performs thread locking using
- * {link RPadLockKey} as lock's ownership identifier.
+ * multiply keys as lock's ownership identifier.
  * 
  * @see org.redisson.RedissonPadLock
  * 
