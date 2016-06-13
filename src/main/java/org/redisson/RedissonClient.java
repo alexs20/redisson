@@ -45,6 +45,7 @@ import org.redisson.core.RListMultimapCache;
 import org.redisson.core.RLock;
 import org.redisson.core.RMap;
 import org.redisson.core.RMapCache;
+import org.redisson.core.RPadLock;
 import org.redisson.core.RPatternTopic;
 import org.redisson.core.RQueue;
 import org.redisson.core.RReadWriteLock;
@@ -362,6 +363,18 @@ public interface RedissonClient {
      * @return
      */
     RReadWriteLock getReadWriteLock(String name);
+
+    /**
+     * Returns {@link RPadLock} instance by name.
+     * <p/>
+     * Implements a <b>non-fair</b> locking so doesn't guarantees an acquire
+     * order by threads.
+     *
+     * @param name
+     *            of lock
+     * @return
+     */
+    RPadLock getPadLock(String name);
 
     /**
      * Returns set instance by name.

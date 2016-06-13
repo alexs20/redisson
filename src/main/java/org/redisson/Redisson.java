@@ -61,6 +61,7 @@ import org.redisson.core.RListMultimapCache;
 import org.redisson.core.RLock;
 import org.redisson.core.RMap;
 import org.redisson.core.RMapCache;
+import org.redisson.core.RPadLock;
 import org.redisson.core.RPatternTopic;
 import org.redisson.core.RQueue;
 import org.redisson.core.RReadWriteLock;
@@ -375,6 +376,11 @@ public class Redisson implements RedissonClient {
     @Override
     public RReadWriteLock getReadWriteLock(String name) {
         return new RedissonReadWriteLock(commandExecutor, name, id);
+    }
+
+    @Override
+    public RPadLock getPadLock(String name) {
+	return new RedissonPadLock(commandExecutor, name, id);
     }
 
     @Override
