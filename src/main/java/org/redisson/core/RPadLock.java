@@ -140,6 +140,13 @@ public interface RPadLock extends RExpirable {
     int getHoldCount(String ownerKey);
 
     /**
+     * Get all owner keys that was used to perform the lock.
+     * 
+     * @return array of keys, never {@code null}
+     */
+    String[] getOwners();
+
+    /**
      * Asynchronous version of {@link #unlock(String [] )}
      */
     Future<Void> unlockAsync(String[] ownerKeys);

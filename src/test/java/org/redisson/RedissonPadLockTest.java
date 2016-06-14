@@ -18,7 +18,6 @@ public class RedissonPadLockTest extends BaseConcurrentTest {
 	return new String[]{String.valueOf(Thread.currentThread().getId())};
     }
     
-    final
     @Test
     public void testTryLockWait() throws InterruptedException {
         testSingleInstanceConcurrency(1, r -> {
@@ -293,6 +292,28 @@ public class RedissonPadLockTest extends BaseConcurrentTest {
         });
 
         Assert.assertEquals(iterations, lockedCounter.get());
+    }
+
+    @Test
+    public void testGetOwners() throws InterruptedException {
+	RPadLock lock = redisson.getPadLock("padlock");
+	Assert.assertEquals(0, lock.getOwners().length);
+
+	lock.lock(new String[] { "123" });
+	Assert.assertEquals(1, lock.getOwners().length);
+
+	lock.lock(new String[] { "123", "abc" });
+	Assert.assertEquals(2, lock.getOwners().length);
+
+	lock.unlock(new String[] { "123" });
+	Assert.assertEquals(2, lock.getOwners().length);
+
+	lock.unlock(new String[] { "123" });
+	Assert.assertEquals(1, lock.getOwners().length);
+
+	lock.unlock(new String[] { "abc" });
+	Assert.assertEquals(0, lock.getOwners().length);
+
     }
 
 }
