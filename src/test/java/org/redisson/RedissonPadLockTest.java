@@ -2,6 +2,7 @@ package org.redisson;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -299,20 +300,42 @@ public class RedissonPadLockTest extends BaseConcurrentTest {
 	RPadLock lock = redisson.getPadLock("padlock");
 	Assert.assertEquals(0, lock.getOwners().length);
 
+	String[] keys;
+
 	lock.lock(new String[] { "123" });
-	Assert.assertEquals(1, lock.getOwners().length);
+	keys = lock.getOwners();
+	Assert.assertEquals(1, keys.length);
+	Assert.assertEquals("123", keys[0]);
+	Assert.assertEquals(1, lock.getHoldCount("123"));
 
 	lock.lock(new String[] { "123", "abc" });
-	Assert.assertEquals(2, lock.getOwners().length);
+	keys = lock.getOwners();
+	Assert.assertEquals(2, keys.length);
+	Arrays.sort(keys);
+	Assert.assertArrayEquals(new String[] { "123", "abc" }, keys);
+	Assert.assertEquals(2, lock.getHoldCount("123"));
+	Assert.assertEquals(1, lock.getHoldCount("abc"));
 
 	lock.unlock(new String[] { "123" });
-	Assert.assertEquals(2, lock.getOwners().length);
+	keys = lock.getOwners();
+	Assert.assertEquals(2, keys.length);
+	Arrays.sort(keys);
+	Assert.assertArrayEquals(new String[] { "123", "abc" }, keys);
+	Assert.assertEquals(1, lock.getHoldCount("123"));
+	Assert.assertEquals(1, lock.getHoldCount("abc"));
 
 	lock.unlock(new String[] { "123" });
-	Assert.assertEquals(1, lock.getOwners().length);
+	keys = lock.getOwners();
+	Assert.assertEquals(1, keys.length);
+	Assert.assertEquals("abc", keys[0]);
+	Assert.assertEquals(0, lock.getHoldCount("123"));
+	Assert.assertEquals(1, lock.getHoldCount("abc"));
 
 	lock.unlock(new String[] { "abc" });
-	Assert.assertEquals(0, lock.getOwners().length);
+	keys = lock.getOwners();
+	Assert.assertEquals(0, keys.length);
+	Assert.assertEquals(0, lock.getHoldCount("123"));
+	Assert.assertEquals(0, lock.getHoldCount("abc"));
 
     }
 
