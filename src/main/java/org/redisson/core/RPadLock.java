@@ -17,6 +17,7 @@ package org.redisson.core;
 /**
  * This class based on knowledge and previous code that was provided in 
  * {@link org.redisson.core.RLock} and {@link java.util.concurrent.locks.Lock} hence previous authors included.
+ * @author Alexander Shulgin
  */
 import java.util.concurrent.TimeUnit;
 
