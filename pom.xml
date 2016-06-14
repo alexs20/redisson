@@ -3,7 +3,7 @@
 
     <groupId>org.redisson</groupId>
     <artifactId>redisson</artifactId>
-    <version>2.2.16</version>
+    <version>2.2.16.F4E01</version>
     <packaging>bundle</packaging>
 
     <name>Redisson</name>

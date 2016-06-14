@@ -474,7 +474,7 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
     }
 
     @Override
-    public Future<Void> lockAsync(long leaseTime, TimeUnit unit, String... ownerKeys) {
+    public Future<Void> lockAsync(final long leaseTime, final TimeUnit unit, final String... ownerKeys) {
 	final Promise<Void> result = newPromise();
 	Future<Long> ttlFuture = tryAcquireAsync(leaseTime, unit, ownerKeys);
 	ttlFuture.addListener(new FutureListener<Long>() {
@@ -579,7 +579,7 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	return tryLockAsync(waitTime, -1, unit, ownerKeys);
     }
 
-    public Future<Boolean> tryLockAsync(long waitTime, long leaseTime, TimeUnit unit, String... ownerKeys) {
+    public Future<Boolean> tryLockAsync(final long waitTime, final long leaseTime, final TimeUnit unit, final String... ownerKeys) {
 	final Promise<Boolean> result = newPromise();
 
 	final AtomicLong time = new AtomicLong(unit.toMillis(waitTime));
