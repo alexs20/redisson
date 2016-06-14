@@ -1,6 +1,5 @@
 /**
  * Copyright 2014 Nikita Koksharov, Nickolay Borbit
- * Copyright 2016 Alexander Shulgin
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.redisson.core;
 /**
  * This class based on knowledge and previous code that was provided in 
  * {@link org.redisson.core.RLock} and {@link java.util.concurrent.locks.Lock} hence previous authors included.
  */
-
-package org.redisson.core;
-
 import java.util.concurrent.TimeUnit;
 
 import io.netty.util.concurrent.Future;
@@ -49,8 +46,6 @@ public interface RPadLock extends RExpirable {
      * or until leaseTime have passed since the lock was granted - whichever
      * comes first.
      *
-     * @param ownerKeyss
-     *            List of keys for this lock.
      * @param leaseTime
      *            the maximum time to hold the lock after granting it, before
      *            automatically releasing it if it hasn't already been released
@@ -58,10 +53,12 @@ public interface RPadLock extends RExpirable {
      *            lock until explicitly unlocked.
      * @param unit
      *            the time unit of the {@code leaseTime} argument
+     * @param ownerKeyss
+     *            List of keys for this lock.
      * @throws InterruptedException
      *             - if the thread is interrupted before or during this method.
      */
-    void lockInterruptibly(String[] ownerKeys, long leaseTime, TimeUnit unit) throws InterruptedException;
+    void lockInterruptibly(long leaseTime, TimeUnit unit, String... ownerKeys) throws InterruptedException;
 
     /**
      * Returns <code>true</code> as soon as the lock is acquired. If the lock is
@@ -72,16 +69,16 @@ public interface RPadLock extends RExpirable {
      * or until <code>leaseTime</code> have passed since the lock was granted -
      * whichever comes first.
      * 
-     * @param ownerKeys
-     *            List of keys for this lock.
      * @param waitTime
      *            the maximum time to acquire the lock
      * @param leaseTime
      * @param unit
+     * @param ownerKeys
+     *            List of keys for this lock.
      * @return
      * @throws InterruptedException
      */
-    boolean tryLock(String[] ownerKeys, long waitTime, long leaseTime, TimeUnit unit) throws InterruptedException;
+    boolean tryLock(long waitTime, long leaseTime, TimeUnit unit, String... ownerKeys) throws InterruptedException;
 
     /**
      * Acquires the lock.
@@ -95,8 +92,6 @@ public interface RPadLock extends RExpirable {
      * or until leaseTime milliseconds have passed since the lock was granted -
      * whichever comes first.
      * 
-     * @param ownerKeys
-     *            List of keys for this lock.
      * @param leaseTime
      *            the maximum time to hold the lock after granting it, before
      *            automatically releasing it if it hasn't already been released
@@ -104,9 +99,10 @@ public interface RPadLock extends RExpirable {
      *            lock until explicitly unlocked.
      * @param unit
      *            the time unit of the {@code leaseTime} argument
-     *
+     * @param ownerKeys
+     *            List of keys for this lock.
      */
-    void lock(String[] ownerKeys, long leaseTime, TimeUnit unit);
+    void lock(long leaseTime, TimeUnit unit, String... ownerKeys);
 
     /**
      * Unlocks lock independently of state
@@ -147,35 +143,34 @@ public interface RPadLock extends RExpirable {
     String[] getOwners();
 
     /**
-     * Asynchronous version of {@link #unlock(String [] )}
+     * Asynchronous version of {@link #unlock(String... )}
      */
-    Future<Void> unlockAsync(String[] ownerKeys);
+    Future<Void> unlockAsync(String... ownerKeys);
 
     /**
-     * Asynchronous version of {@link #tryLock(String [] )}
+     * Asynchronous version of {@link #tryLock(String... )}
      */
-    Future<Boolean> tryLockAsync(String[] ownerKeys);
+    Future<Boolean> tryLockAsync(String... ownerKeys);
 
     /**
-     * Asynchronous version of {@link #lock(String [] )}
+     * Asynchronous version of {@link #lock(String... )}
      */
-    Future<Void> lockAsync(String[] ownerKeys);
+    Future<Void> lockAsync(String... ownerKeys);
 
     /**
-     * Asynchronous version of {@link #lock(String [] , long, TimeUnit)}
+     * Asynchronous version of {@link #lock(long, TimeUnit, String...)}
      */
-    Future<Void> lockAsync(String[] ownerKeys, long leaseTime, TimeUnit unit);
+    Future<Void> lockAsync(long leaseTime, TimeUnit unit, String... ownerKeys);
 
     /**
-     * Asynchronous version of {@link #tryLock(String [] , long, TimeUnit)}
+     * Asynchronous version of {@link #tryLock(long, TimeUnit, String...)}
      */
-    Future<Boolean> tryLockAsync(String[] ownerKeys, long waitTime, TimeUnit unit);
+    Future<Boolean> tryLockAsync(long waitTime, TimeUnit unit, String... ownerKeys);
 
     /**
-     * Asynchronous version of
-     * {@link #tryLock(String [] , long, long, TimeUnit)}
+     * Asynchronous version of {@link #tryLock(long, long, TimeUnit, String...)}
      */
-    Future<Boolean> tryLockAsync(String[] ownerKeys, long waitTime, long leaseTime, TimeUnit unit);
+    Future<Boolean> tryLockAsync(long waitTime, long leaseTime, TimeUnit unit, String... ownerKeys);
 
     /**
      * Acquires the lock.
@@ -188,7 +183,7 @@ public interface RPadLock extends RExpirable {
      * @param ownerKeys
      *            List of keys for this lock.
      */
-    void lock(String[] ownerKeys);
+    void lock(String... ownerKeys);
 
     /**
      * Acquires the lock unless the current thread is
@@ -207,7 +202,7 @@ public interface RPadLock extends RExpirable {
      *             if the current thread is interrupted while acquiring the lock
      *             (and interruption of lock acquisition is supported)
      */
-    void lockInterruptibly(String[] ownerKeys) throws InterruptedException;
+    void lockInterruptibly(String... ownerKeys) throws InterruptedException;
 
     /**
      * Acquires the lock only if it is free at the time of invocation.
@@ -224,7 +219,7 @@ public interface RPadLock extends RExpirable {
      *            List of keys for this lock.
      * @return {@code true} if the lock was acquired and {@code false} otherwise
      */
-    boolean tryLock(String[] ownerKeys);
+    boolean tryLock(String... ownerKeys);
 
     /**
      * Acquires the lock if it is free within the given waiting time and the
@@ -233,20 +228,19 @@ public interface RPadLock extends RExpirable {
      * For more details see {@see java.util.concurrent.locks.Lock#tryLock(long,
      * TimeUnit) } considering that owner is a current thread.
      * 
-     * @param ownerKeys
-     *            List of keys for this lock.
      * @param time
      *            the maximum time to wait for the lock
      * @param unit
      *            the time unit of the {@code time} argument
      * @return {@code true} if the lock was acquired and {@code false} if the
      *         waiting time elapsed before the lock was acquired
-     *
+     * @param ownerKeys
+     *            List of keys for this lock.
      * @throws InterruptedException
      *             if the current thread is interrupted while acquiring the lock
      *             (and interruption of lock acquisition is supported)
      */
-    boolean tryLock(String[] ownerKeys, long time, TimeUnit unit) throws InterruptedException;
+    boolean tryLock(long time, TimeUnit unit, String... ownerKeys) throws InterruptedException;
 
     /**
      * Releases the lock.
@@ -254,6 +248,6 @@ public interface RPadLock extends RExpirable {
      * @param ownerKeys
      *            List of keys for this lock.
      */
-    void unlock(String[] ownerKeys);
+    void unlock(String... ownerKeys);
 
 }

@@ -1,6 +1,5 @@
 /**
  * Copyright 2014 Nikita Koksharov, Nickolay Borbit
- * Copyright 2016 Alexander Shulgin
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.redisson;
 /**
  * This class based on knowledge and previous code that was provided in 
  * {@link org.redisson.RedissonLock} hence previous authors included.
+ * @author Alexander Shulgin
  */
-package org.redisson;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -86,7 +85,7 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
     }
 
     @Override
-    public void lock(String[] ownerKeys) {
+    public void lock(String... ownerKeys) {
 	try {
 	    lockInterruptibly(ownerKeys);
 	} catch (InterruptedException e) {
@@ -95,21 +94,21 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
     }
 
     @Override
-    public void lock(String[] ownerKeys, long leaseTime, TimeUnit unit) {
+    public void lock(long leaseTime, TimeUnit unit, String... ownerKeys) {
 	try {
-	    lockInterruptibly(ownerKeys, leaseTime, unit);
+	    lockInterruptibly(leaseTime, unit, ownerKeys);
 	} catch (InterruptedException e) {
 	    Thread.currentThread().interrupt();
 	}
     }
 
     @Override
-    public void lockInterruptibly(String[] ownerKeys) throws InterruptedException {
-	lockInterruptibly(ownerKeys, -1, null);
+    public void lockInterruptibly(String... ownerKeys) throws InterruptedException {
+	lockInterruptibly(-1, null, ownerKeys);
     }
 
     @Override
-    public void lockInterruptibly(String[] ownerKeys, long leaseTime, TimeUnit unit) throws InterruptedException {
+    public void lockInterruptibly(long leaseTime, TimeUnit unit, String... ownerKeys) throws InterruptedException {
 	Long ttl = tryAcquire(ownerKeys, leaseTime, unit);
 	// lock acquired
 	if (ttl == null) {
@@ -190,7 +189,7 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
     }
 
     @Override
-    public boolean tryLock(String[] ownerKeys) {
+    public boolean tryLock(String... ownerKeys) {
 	return get(tryLockAsync(ownerKeys));
     }
 
@@ -271,7 +270,7 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
     }
 
     @Override
-    public boolean tryLock(String[] ownerKeys, long waitTime, long leaseTime, TimeUnit unit)
+    public boolean tryLock(long waitTime, long leaseTime, TimeUnit unit, String... ownerKeys)
 	    throws InterruptedException {
 	long time = unit.toMillis(waitTime);
 	Long ttl = tryAcquire(ownerKeys, leaseTime, unit);
@@ -334,12 +333,12 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
     }
 
     @Override
-    public boolean tryLock(String[] ownerKeys, long waitTime, TimeUnit unit) throws InterruptedException {
-	return tryLock(ownerKeys, waitTime, -1, unit);
+    public boolean tryLock(long waitTime, TimeUnit unit, String... ownerKeys) throws InterruptedException {
+	return tryLock(waitTime, -1, unit, ownerKeys);
     }
 
     @Override
-    public void unlock(String[] ownerKeys) {
+    public void unlock(String... ownerKeys) {
 	try {
 	    get(unlockAsync(ownerKeys));
 	} catch (RedisException re) {
@@ -402,7 +401,7 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	return forceUnlockAsync();
     }
 
-    public Future<Void> unlockAsync(final String[] ownerKeys) {
+    public Future<Void> unlockAsync(final String... ownerKeys) {
 	final int keyArgIdxOffset = 3;
 	StringBuilder script = new StringBuilder();
 	script.append("if (redis.call('exists', KEYS[1]) == 0) then ");
@@ -420,12 +419,9 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	script.append("return nil; ");
 	script.append("end; ");
 	for (int i = 0; i < ownerKeys.length; i++) {
-	    script.append("if (redis.call('hexists', KEYS[1], ARGV[").append(i + keyArgIdxOffset)
-		    .append("]) == 1) then ");
 	    script.append("if (redis.call('hincrby', KEYS[1], ARGV[").append(i + keyArgIdxOffset)
 		    .append("], -1) <= 0) then ");
 	    script.append("redis.call('hdel', KEYS[1], ARGV[").append(i + keyArgIdxOffset).append("]); ");
-	    script.append("end; ");
 	    script.append("end; ");
 	}
 	script.append("if (redis.call('hlen', KEYS[1]) > 0) then ");
@@ -473,12 +469,12 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	return result;
     }
 
-    public Future<Void> lockAsync(String[] ownerKeys) {
-	return lockAsync(ownerKeys, -1, null);
+    public Future<Void> lockAsync(String... ownerKeys) {
+	return lockAsync(-1, null, ownerKeys);
     }
 
     @Override
-    public Future<Void> lockAsync(String[] ownerKeys, long leaseTime, TimeUnit unit) {
+    public Future<Void> lockAsync(long leaseTime, TimeUnit unit, String... ownerKeys) {
 	final Promise<Void> result = newPromise();
 	Future<Long> ttlFuture = tryAcquireAsync(leaseTime, unit, ownerKeys);
 	ttlFuture.addListener(new FutureListener<Long>() {
@@ -575,20 +571,15 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	});
     }
 
-    public Future<Boolean> tryLockAsync(String[] ownerKeys) {
+    public Future<Boolean> tryLockAsync(String... ownerKeys) {
 	return tryAcquireOnceAsync(-1, null, ownerKeys);
     }
 
-    public Future<Boolean> tryLockAsync(String[] ownerKeys, long waitTime, TimeUnit unit) {
-	return tryLockAsync(ownerKeys, waitTime, -1, unit);
+    public Future<Boolean> tryLockAsync(long waitTime, TimeUnit unit, String... ownerKeys) {
+	return tryLockAsync(waitTime, -1, unit, ownerKeys);
     }
 
-    public Future<Boolean> tryLockAsync(String[] ownerKeys, long waitTime, long leaseTime, TimeUnit unit) {
-	return tryLockAsync(waitTime, leaseTime, unit, ownerKeys);
-    }
-
-    public Future<Boolean> tryLockAsync(final long waitTime, final long leaseTime, final TimeUnit unit,
-	    final String[] ownerKeys) {
+    public Future<Boolean> tryLockAsync(long waitTime, long leaseTime, TimeUnit unit, String... ownerKeys) {
 	final Promise<Boolean> result = newPromise();
 
 	final AtomicLong time = new AtomicLong(unit.toMillis(waitTime));
