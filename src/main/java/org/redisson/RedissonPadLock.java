@@ -119,11 +119,11 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 		if (ttl == null) {
 		    break;
 		}
-
-		// waiting for message
-		if (ttl >= 0) {
+		if(ttl == -2){ //expired on middle of script execution
+		    //just repeat again
+		} else if (ttl >= 0) { // waiting for message
 		    getEntry().getLatch().tryAcquire(ttl, TimeUnit.MILLISECONDS);
-		} else {
+		} else { //ttl == -1, means permanent lock, should not happen
 		    getEntry().getLatch().acquire();
 		}
 	    }
