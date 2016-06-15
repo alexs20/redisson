@@ -78,6 +78,7 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
     private static ConcurrentMap<String, String> scriptHashCache = PlatformDependent.newConcurrentHashMap();
     private static final String TRY_LOCK_SCRIPT = "TL";
     private static final String UNLOCK_SCRIPT = "UN";
+    private static final String UNLOCK_ALL_SCRIPT = "UA";
 
     protected RedissonPadLock(CommandExecutor commandExecutor, String name, UUID id) {
 	super(commandExecutor, name);
@@ -188,6 +189,48 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	}
 	return hash;
     }    
+    
+    private String getUnlockAllScriptHash(int keys) {
+	String hash = scriptHashCache.get(UNLOCK_ALL_SCRIPT + keys);
+	if (hash == null) {
+	    synchronized (scriptHashCache) {
+		hash = scriptHashCache.get(UNLOCK_ALL_SCRIPT + keys);
+		if (hash == null) {
+		    final int keyArgIdxOffset = 3;
+		    StringBuilder script = new StringBuilder();
+		    script.append("if (redis.call('exists', KEYS[1]) == 0) then ");
+		    script.append("redis.call('publish', KEYS[2], ARGV[1]); ");
+		    script.append("return 1; ");
+		    script.append("end; ");
+		    script.append("if (");
+		    for (int i = 0; i < keys; i++) {
+			if (i > 0) {
+			    script.append("and ");
+			}
+			script.append("redis.call('hexists', KEYS[1], ARGV[").append(i + keyArgIdxOffset)
+				.append("]) == 0 ");
+		    }
+		    script.append(") then ");
+		    script.append("return nil; ");
+		    script.append("end; ");
+		    script.append("redis.call('del', KEYS[1]); ");
+		    script.append("redis.call('publish', KEYS[2], ARGV[1]); ");
+		    script.append("return 1; ");
+		    try {
+			MessageDigest cript = MessageDigest.getInstance("SHA-1");
+			cript.reset();
+			cript.update(script.toString().getBytes("utf8"));
+			hash = new BigInteger(1, cript.digest()).toString(16);
+			get(commandExecutor.writeAllAsync(RedisCommands.SCRIPT_LOAD, script.toString()));
+			scriptHashCache.put(UNLOCK_ALL_SCRIPT + keys, hash);
+		    } catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
+			throw new RedisException(e.getMessage(), e);
+		    }
+		}
+	    }
+	}
+	return hash;
+    }        
     
     protected String getEntryName() {
 	return id + ":" + getName();
@@ -493,11 +536,21 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	return forceUnlockAsync();
     }
 
+    @Override
+    public Future<Void> unlockAllAsync(String... ownerKeys) {
+	return innerUnlockAsync(true, ownerKeys);
+    }
+    
+    @Override
     public Future<Void> unlockAsync(String... ownerKeys) {
+	return innerUnlockAsync(false, ownerKeys);
+    }
+    
+    private Future<Void> innerUnlockAsync(boolean isAll, String... ownerKeys) {
 	if(ownerKeys == null || ownerKeys.length == 0){
 	    ownerKeys = new String [] {id + ":" + Thread.currentThread().getId()};
 	}
-	String scriptHash = getUnlockScriptHash(ownerKeys.length);
+	String scriptHash = isAll ?  getUnlockAllScriptHash(ownerKeys.length) : getUnlockScriptHash(ownerKeys.length);
 	
 	List<String> params = new ArrayList<>();
 	params.add(String.valueOf(LockPubSub.unlockMessage));
@@ -788,6 +841,12 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 		}
 	    }
 	});
+    }
+
+    @Override
+    public void unlockAll(String... ownerKeys) {
+	// TODO Auto-generated method stub
+	
     }
 
 }

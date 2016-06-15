@@ -149,6 +149,11 @@ public interface RPadLock extends RExpirable {
     Future<Void> unlockAsync(String... ownerKeys);
 
     /**
+     * Asynchronous version of {@link #unlockAll(String... )}
+     */
+    Future<Void> unlockAllAsync(String... ownerKeys);
+    
+    /**
      * Asynchronous version of {@link #tryLock(String... )}
      */
     Future<Boolean> tryLockAsync(String... ownerKeys);
@@ -251,4 +256,11 @@ public interface RPadLock extends RExpirable {
      */
     void unlock(String... ownerKeys);
 
+    /**
+     * Releases the lock reseting owner counters to zero.
+     * 
+     * @param ownerKeys
+     *            List of keys for this lock.
+     */
+    void unlockAll(String... ownerKeys);    
 }
