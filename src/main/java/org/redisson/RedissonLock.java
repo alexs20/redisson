@@ -130,8 +130,8 @@ public class RedissonLock extends RedissonExpirable implements RLock {
                     // just repeat again
                 } else if (ttl >= 0) { // waiting for message
                     getEntry(threadId).getLatch().tryAcquire(ttl, TimeUnit.MILLISECONDS);
-                } else { // ttl == -1, means permanent lock, should not happen
-                    getEntry(threadId).getLatch().acquire();
+                } else { // ttl == -1, means permanent lock, should not happen, but even if happen then do not stuck on it forever.
+                    getEntry(threadId).getLatch().tryAcquire(LOCK_EXPIRATION_INTERVAL_SECONDS, TimeUnit.MILLISECONDS);
                 }
             }
         } finally {
