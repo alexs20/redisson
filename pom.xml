@@ -3,7 +3,7 @@
 
     <groupId>org.redisson</groupId>
     <artifactId>redisson</artifactId>
-    <version>2.2.16.F4E01</version>
+    <version>2.2.16.F4E02.1</version>
     <packaging>bundle</packaging>
 
     <name>Redisson</name>
@@ -12,10 +12,10 @@
     <url>https://github.com/mrniko/redisson</url>
 
     <scm>
-        <url>scm:git:git@github.com:mrniko/redisson.git</url>
-        <connection>scm:git:git@github.com:mrniko/redisson.git</connection>
-        <developerConnection>scm:git:git@github.com:mrniko/redisson.git</developerConnection>
-        <tag>redisson-2.2.16</tag>
+        <url>scm:git:git@github.com:alexs20/redisson.git</url>
+        <connection>scm:git:git@github.com:alexs20/redisson.git</connection>
+        <developerConnection>scm:git:git@github.com:alexs20/redisson.git</developerConnection>
+        <tag>F4E02.1</tag>
     </scm>
 
     <prerequisites>
