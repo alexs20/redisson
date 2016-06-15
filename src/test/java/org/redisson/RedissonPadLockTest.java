@@ -248,10 +248,10 @@ public class RedissonPadLockTest extends BaseConcurrentTest {
 
 	int iterations = 15;
 	testSingleInstanceConcurrency(iterations, r -> {
-	    Lock lock = r.getLock("testConcurrency_SingleInstance");
-	    lock.lock();
+	    RPadLock lock = r.getPadLock("testConcurrency_SingleInstance");
+	    lock.lock(thisThreadKeys());
 	    lockedCounter.incrementAndGet();
-	    lock.unlock();
+	    lock.unlock(thisThreadKeys());
 	});
 
 	Assert.assertEquals(iterations, lockedCounter.get());
@@ -264,14 +264,14 @@ public class RedissonPadLockTest extends BaseConcurrentTest {
 
 	testMultiInstanceConcurrency(16, r -> {
 	    for (int i = 0; i < iterations; i++) {
-		r.getLock("testConcurrency_MultiInstance1").lock();
+		r.getPadLock("testConcurrency_MultiInstance1").lock(thisThreadKeys());
 		try {
 		    Thread.sleep(10);
 		} catch (InterruptedException e) {
 		    e.printStackTrace();
 		}
 		lockedCounter.incrementAndGet();
-		r.getLock("testConcurrency_MultiInstance1").unlock();
+		r.getPadLock("testConcurrency_MultiInstance1").unlock(thisThreadKeys());
 	    }
 	});
 
@@ -284,10 +284,10 @@ public class RedissonPadLockTest extends BaseConcurrentTest {
 	final AtomicInteger lockedCounter = new AtomicInteger();
 
 	testMultiInstanceConcurrency(iterations, r -> {
-	    Lock lock = r.getLock("testConcurrency_MultiInstance2");
-	    lock.lock();
+	    RPadLock lock = r.getPadLock("testConcurrency_MultiInstance2");
+	    lock.lock(thisThreadKeys());
 	    lockedCounter.incrementAndGet();
-	    lock.unlock();
+	    lock.unlock(thisThreadKeys());
 	});
 
 	Assert.assertEquals(iterations, lockedCounter.get());

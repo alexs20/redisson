@@ -192,6 +192,10 @@ public interface RedisCommands {
     RedisCommand<Set<Entry<Object, Object>>> EVAL_MAP_ENTRY = new RedisCommand<Set<Entry<Object, Object>>>("EVAL", new ObjectMapEntryReplayDecoder(), ValueType.MAP);
     RedisCommand<List<Object>> EVAL_MAP_VALUE_LIST = new RedisCommand<List<Object>>("EVAL", new ObjectListReplayDecoder<Object>(), ValueType.MAP_VALUE);
 
+    RedisStrictCommand<Long> EVALSHA_LONG = new RedisStrictCommand<Long>("EVALSHA");
+    RedisStrictCommand<Boolean> EVALSHA_NULL_BOOLEAN = new RedisStrictCommand<Boolean>("EVALSHA", new BooleanNullReplayConvertor());
+    RedisStrictCommand<Boolean> EVALSHA_BOOLEAN = new RedisStrictCommand<Boolean>("EVALSHA", new BooleanReplayConvertor());
+    
     RedisStrictCommand<Long> INCR = new RedisStrictCommand<Long>("INCR");
     RedisStrictCommand<Long> INCRBY = new RedisStrictCommand<Long>("INCRBY");
     RedisStrictCommand<Double> INCRBYFLOAT = new RedisStrictCommand<Double>("INCRBYFLOAT", new DoubleReplayConvertor());

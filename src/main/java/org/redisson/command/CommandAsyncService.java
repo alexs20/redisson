@@ -69,6 +69,7 @@ import io.netty.util.concurrent.ScheduledFuture;
 public class CommandAsyncService implements CommandAsyncExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(CommandAsyncService.class);
+    private static final long DEADLOCK_PROTECT_PERIOD_SEC = 1; 
 
     final ConnectionManager connectionManager;
 
@@ -83,23 +84,28 @@ public class CommandAsyncService implements CommandAsyncExecutor {
 
     @Override
     public <V> V get(Future<V> future) {
-        final CountDownLatch l = new CountDownLatch(1);
-        future.addListener(new FutureListener<V>() {
-            @Override
-            public void operationComplete(Future<V> future) throws Exception {
-                l.countDown();
-            }
-        });
-        try {
-            l.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        // commented out due to blocking issues up to 200 ms per minute for each thread
-        // future.awaitUninterruptibly();
-        if (future.isSuccess()) {
-            return future.getNow();
-        }
+	final CountDownLatch l = new CountDownLatch(1);
+	future.addListener(new FutureListener<V>() {
+	    @Override
+	    public void operationComplete(Future<V> future) throws Exception {
+		l.countDown();
+	    }
+	});
+	while (true) {
+	    try {
+		l.await(DEADLOCK_PROTECT_PERIOD_SEC, TimeUnit.SECONDS);
+	    } catch (InterruptedException e) {
+		Thread.currentThread().interrupt();
+	    }
+	    // commented out due to blocking issues up to 200 ms per minute for
+	    // each thread
+	    // future.awaitUninterruptibly();
+	    if (future.isSuccess()) {
+		return future.getNow();
+	    } else if (future.isDone()) {
+		break;
+	    }
+	}
         throw convertException(future);
     }
 

@@ -15,6 +15,10 @@
  */
 package org.redisson;
 
+import java.io.UnsupportedEncodingException;
+import java.math.BigInteger;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 /**
  * This class based on knowledge and previous code that was provided in 
  * {@link org.redisson.RedissonLock} hence previous authors included.
@@ -70,19 +74,127 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
     protected static final LockPubSub PUBSUB = new LockPubSub();
 
     final CommandExecutor commandExecutor;
+    
+    private static ConcurrentMap<String, String> scriptHashCache = PlatformDependent.newConcurrentHashMap();
+    private static final String TRY_LOCK_SCRIPT = "TL";
+    private static final String UNLOCK_SCRIPT = "UN";
 
     protected RedissonPadLock(CommandExecutor commandExecutor, String name, UUID id) {
 	super(commandExecutor, name);
 	this.commandExecutor = commandExecutor;
 	this.id = id;
     }
+    
+    private String getTryLockScriptHash(int keys) {
+	String hash = scriptHashCache.get(TRY_LOCK_SCRIPT + keys);
+	if (hash == null) {
+	    synchronized (scriptHashCache) {
+		hash = scriptHashCache.get(TRY_LOCK_SCRIPT + keys);
+		if (hash == null) {
+		    final int keyArgIdxOffset = 2;
+		    StringBuilder script = new StringBuilder();
+		    script.append("if (redis.call('exists', KEYS[1]) == 0) then ");
+		    for (int i = 0; i < keys; i++) {
+			script.append("redis.call('hset', KEYS[1], ARGV[").append(i + keyArgIdxOffset)
+				.append("], 1); ");
+		    }
+		    script.append("redis.call('pexpire', KEYS[1], ARGV[1]); ");
+		    script.append("return nil; ");
+		    script.append("end; ");
 
+		    script.append("if (");
+		    for (int i = 0; i < keys; i++) {
+			if (i > 0) {
+			    script.append("or ");
+			}
+			script.append("redis.call('hexists', KEYS[1], ARGV[").append(i + keyArgIdxOffset)
+				.append("]) == 1 ");
+		    }
+		    script.append(") then ");
+		    for (int i = 0; i < keys; i++) {
+			script.append("redis.call('hincrby', KEYS[1], ARGV[").append(i + keyArgIdxOffset)
+				.append("], 1); ");
+		    }
+		    script.append("redis.call('pexpire', KEYS[1], ARGV[1]); ");
+		    script.append("return nil; ");
+		    script.append("end; ");
+
+		    script.append("return redis.call('pttl', KEYS[1]); ");
+		    try {
+			MessageDigest cript = MessageDigest.getInstance("SHA-1");
+			cript.reset();
+			cript.update(script.toString().getBytes("utf8"));
+			hash = new BigInteger(1, cript.digest()).toString(16);
+			get(commandExecutor.writeAllAsync(RedisCommands.SCRIPT_LOAD, script.toString()));
+			scriptHashCache.put(TRY_LOCK_SCRIPT + keys, hash);
+		    } catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
+			throw new RedisException(e.getMessage(), e);
+		    }
+		}
+	    }
+	}
+	return hash;
+    }
+    
+    private String getUnlockScriptHash(int keys) {
+	String hash = scriptHashCache.get(UNLOCK_SCRIPT + keys);
+	if (hash == null) {
+	    synchronized (scriptHashCache) {
+		hash = scriptHashCache.get(UNLOCK_SCRIPT + keys);
+		if (hash == null) {
+		    final int keyArgIdxOffset = 3;
+		    StringBuilder script = new StringBuilder();
+		    script.append("if (redis.call('exists', KEYS[1]) == 0) then ");
+		    script.append("redis.call('publish', KEYS[2], ARGV[1]); ");
+		    script.append("return 1; ");
+		    script.append("end; ");
+		    script.append("if (");
+		    for (int i = 0; i < keys; i++) {
+			if (i > 0) {
+			    script.append("and ");
+			}
+			script.append("redis.call('hexists', KEYS[1], ARGV[").append(i + keyArgIdxOffset)
+				.append("]) == 0 ");
+		    }
+		    script.append(") then ");
+		    script.append("return nil; ");
+		    script.append("end; ");
+		    for (int i = 0; i < keys; i++) {
+			script.append("if (redis.call('hincrby', KEYS[1], ARGV[").append(i + keyArgIdxOffset)
+				.append("], -1) <= 0) then ");
+			script.append("redis.call('hdel', KEYS[1], ARGV[").append(i + keyArgIdxOffset).append("]); ");
+			script.append("end; ");
+		    }
+		    script.append("if (redis.call('hlen', KEYS[1]) > 0) then ");
+		    script.append("redis.call('pexpire', KEYS[1], ARGV[2]); ");
+		    script.append("return 0; ");
+		    script.append("else ");
+		    script.append("redis.call('del', KEYS[1]); ");
+		    script.append("redis.call('publish', KEYS[2], ARGV[1]); ");
+		    script.append("return 1; ");
+		    script.append("end; ");
+		    try {
+			MessageDigest cript = MessageDigest.getInstance("SHA-1");
+			cript.reset();
+			cript.update(script.toString().getBytes("utf8"));
+			hash = new BigInteger(1, cript.digest()).toString(16);
+			get(commandExecutor.writeAllAsync(RedisCommands.SCRIPT_LOAD, script.toString()));
+			scriptHashCache.put(UNLOCK_SCRIPT + keys, hash);
+		    } catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
+			throw new RedisException(e.getMessage(), e);
+		    }
+		}
+	    }
+	}
+	return hash;
+    }    
+    
     protected String getEntryName() {
 	return id + ":" + getName();
     }
 
     String getChannelName() {
-	return "redisson_lock__channel__{" + getName() + "}";
+	return "redisson_pad_lock__channel__{" + getName() + "}";
     }
 
     @Override
@@ -110,6 +222,9 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 
     @Override
     public void lockInterruptibly(long leaseTime, TimeUnit unit, String... ownerKeys) throws InterruptedException {
+	if(ownerKeys == null || ownerKeys.length == 0){
+	    ownerKeys = new String [] {id + ":" + Thread.currentThread().getId()};
+	}
         Long ttl = tryAcquire(ownerKeys, leaseTime, unit);
         // lock acquired
         if (ttl == null) {
@@ -143,10 +258,10 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 
     private Future<Boolean> tryAcquireOnceAsync(long leaseTime, TimeUnit unit, String[] ownerKeys) {
 	if (leaseTime != -1) {
-	    return tryLockInnerAsync(leaseTime, unit, ownerKeys, RedisCommands.EVAL_NULL_BOOLEAN);
+	    return tryLockInnerAsync(leaseTime, unit, ownerKeys, RedisCommands.EVALSHA_NULL_BOOLEAN);
 	}
 	Future<Boolean> ttlRemainingFuture = tryLockInnerAsync(LOCK_EXPIRATION_INTERVAL_SECONDS, TimeUnit.SECONDS,
-		ownerKeys, RedisCommands.EVAL_NULL_BOOLEAN);
+		ownerKeys, RedisCommands.EVALSHA_NULL_BOOLEAN);
 	ttlRemainingFuture.addListener(new FutureListener<Boolean>() {
 	    @Override
 	    public void operationComplete(Future<Boolean> future) throws Exception {
@@ -166,10 +281,10 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 
     private <T> Future<Long> tryAcquireAsync(long leaseTime, TimeUnit unit, String[] ownerKeys) {
 	if (leaseTime != -1) {
-	    return tryLockInnerAsync(leaseTime, unit, ownerKeys, RedisCommands.EVAL_LONG);
+	    return tryLockInnerAsync(leaseTime, unit, ownerKeys, RedisCommands.EVALSHA_LONG);
 	}
 	Future<Long> ttlRemainingFuture = tryLockInnerAsync(LOCK_EXPIRATION_INTERVAL_SECONDS, TimeUnit.SECONDS,
-		ownerKeys, RedisCommands.EVAL_LONG);
+		ownerKeys, RedisCommands.EVALSHA_LONG);
 	ttlRemainingFuture.addListener(new FutureListener<Long>() {
 	    @Override
 	    public void operationComplete(Future<Long> future) throws Exception {
@@ -233,38 +348,16 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 
     protected <T> Future<T> tryLockInnerAsync(long leaseTime, TimeUnit unit, String[] ownerKeys,
 	    RedisStrictCommand<T> command) {
+	if(ownerKeys == null || ownerKeys.length == 0){
+	    ownerKeys = new String [] {id + ":" + Thread.currentThread().getId()};
+	}
 	internalLockLeaseTime = unit.toMillis(leaseTime);
-	final int keyArgIdxOffset = 2;
-	StringBuilder script = new StringBuilder();
-	script.append("if (redis.call('exists', KEYS[1]) == 0) then ");
-	for (int i = 0; i < ownerKeys.length; i++) {
-	    script.append("redis.call('hset', KEYS[1], ARGV[").append(i + keyArgIdxOffset).append("], 1); ");
-	}
-	script.append("redis.call('pexpire', KEYS[1], ARGV[1]); ");
-	script.append("return nil; ");
-	script.append("end; ");
-
-	script.append("if (");
-	for (int i = 0; i < ownerKeys.length; i++) {
-	    if (i > 0) {
-		script.append("or ");
-	    }
-	    script.append("redis.call('hexists', KEYS[1], ARGV[").append(i + keyArgIdxOffset).append("]) == 1 ");
-	}
-	script.append(") then ");
-	for (int i = 0; i < ownerKeys.length; i++) {
-	    script.append("redis.call('hincrby', KEYS[1], ARGV[").append(i + keyArgIdxOffset).append("], 1); ");
-	}
-	script.append("redis.call('pexpire', KEYS[1], ARGV[1]); ");
-	script.append("return nil; ");
-	script.append("end; ");
-
-	script.append("return redis.call('pttl', KEYS[1]); ");
+	String scriptHash = getTryLockScriptHash(ownerKeys.length);
 
 	List<String> params = new ArrayList<>();
 	params.add(String.valueOf(internalLockLeaseTime));
 	params.addAll(Arrays.asList(ownerKeys));
-	return commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE, command, script.toString(),
+	return commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE, command, scriptHash,
 		Collections.<Object> singletonList(getName()), params.toArray());
     }
 
@@ -400,38 +493,12 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	return forceUnlockAsync();
     }
 
-    public Future<Void> unlockAsync(final String... ownerKeys) {
-	final int keyArgIdxOffset = 3;
-	StringBuilder script = new StringBuilder();
-	script.append("if (redis.call('exists', KEYS[1]) == 0) then ");
-	script.append("redis.call('publish', KEYS[2], ARGV[1]); ");
-	script.append("return 1; ");
-	script.append("end; ");
-	script.append("if (");
-	for (int i = 0; i < ownerKeys.length; i++) {
-	    if (i > 0) {
-		script.append("and ");
-	    }
-	    script.append("redis.call('hexists', KEYS[1], ARGV[").append(i + keyArgIdxOffset).append("]) == 0 ");
+    public Future<Void> unlockAsync(String... ownerKeys) {
+	if(ownerKeys == null || ownerKeys.length == 0){
+	    ownerKeys = new String [] {id + ":" + Thread.currentThread().getId()};
 	}
-	script.append(") then ");
-	script.append("return nil; ");
-	script.append("end; ");
-	for (int i = 0; i < ownerKeys.length; i++) {
-	    script.append("if (redis.call('hincrby', KEYS[1], ARGV[").append(i + keyArgIdxOffset)
-		    .append("], -1) <= 0) then ");
-	    script.append("redis.call('hdel', KEYS[1], ARGV[").append(i + keyArgIdxOffset).append("]); ");
-	    script.append("end; ");
-	}
-	script.append("if (redis.call('hlen', KEYS[1]) > 0) then ");
-	script.append("redis.call('pexpire', KEYS[1], ARGV[2]); ");
-	script.append("return 0; ");
-	script.append("else ");
-	script.append("redis.call('del', KEYS[1]); ");
-	script.append("redis.call('publish', KEYS[2], ARGV[1]); ");
-	script.append("return 1; ");
-	script.append("end; ");
-
+	String scriptHash = getUnlockScriptHash(ownerKeys.length);
+	
 	List<String> params = new ArrayList<>();
 	params.add(String.valueOf(LockPubSub.unlockMessage));
 	params.add(String.valueOf(internalLockLeaseTime));
@@ -439,9 +506,9 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 
 	final Promise<Void> result = newPromise();
 	Future<Boolean> future = commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE,
-		RedisCommands.EVAL_BOOLEAN, script.toString(), Arrays.<Object> asList(getName(), getChannelName()),
+		RedisCommands.EVALSHA_BOOLEAN, scriptHash, Arrays.<Object> asList(getName(), getChannelName()),
 		params.toArray());
-
+	final String [] innerOwnerKeys = ownerKeys;
 	future.addListener(new FutureListener<Boolean>() {
 	    @Override
 	    public void operationComplete(Future<Boolean> future) throws Exception {
@@ -454,7 +521,7 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 		if (opStatus == null) {
 		    IllegalMonitorStateException cause = new IllegalMonitorStateException(
 			    "attempt to unlock lock, not locked by current owner by node id: " + id + " owner: "
-				    + ownerKeys);
+				    + innerOwnerKeys);
 		    result.setFailure(cause);
 		    return;
 		}
