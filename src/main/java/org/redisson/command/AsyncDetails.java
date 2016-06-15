@@ -55,20 +55,6 @@ public class AsyncDetails<V, R> {
     public AsyncDetails() {
     }
 
-    public static AsyncDetails acquire() {
-//        AsyncDetails result = queue.poll();
-//        if (result != null) {
-//            return result;
-//        }
-
-        AsyncDetails details = new AsyncDetails();
-        return details;
-    }
-
-    public static void release(AsyncDetails details) {
-//        queue.add(details);
-    }
-
     public void init(Future<RedisConnection> connectionFuture,
             Promise<R> attemptPromise, boolean readOnlyMode, NodeSource source,
             Codec codec, RedisCommand<V> command, Object[] params,

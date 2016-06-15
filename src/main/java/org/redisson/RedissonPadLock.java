@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 package org.redisson;
+
 /**
  * This class based on knowledge and previous code that was provided in 
  * {@link org.redisson.RedissonLock} hence previous authors included.
@@ -109,16 +110,15 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 
     @Override
     public void lockInterruptibly(long leaseTime, TimeUnit unit, String... ownerKeys) throws InterruptedException {
-	Long ttl = tryAcquire(ownerKeys, leaseTime, unit);
-	// lock acquired
-	if (ttl == null) {
-	    return;
-	}
-
 	Future<RedissonLockEntry> future = subscribe();
 	get(future);
-
 	try {
+	    Long ttl = tryAcquire(ownerKeys, leaseTime, unit);
+	    // lock acquired
+	    if (ttl == null) {
+		return;
+	    }
+
 	    while (true) {
 		ttl = tryAcquire(ownerKeys, leaseTime, unit);
 		// lock acquired
@@ -579,7 +579,8 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	return tryLockAsync(waitTime, -1, unit, ownerKeys);
     }
 
-    public Future<Boolean> tryLockAsync(final long waitTime, final long leaseTime, final TimeUnit unit, final String... ownerKeys) {
+    public Future<Boolean> tryLockAsync(final long waitTime, final long leaseTime, final TimeUnit unit,
+	    final String... ownerKeys) {
 	final Promise<Boolean> result = newPromise();
 
 	final AtomicLong time = new AtomicLong(unit.toMillis(waitTime));

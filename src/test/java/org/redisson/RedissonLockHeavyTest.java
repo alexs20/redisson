@@ -22,7 +22,7 @@ public class RedissonLockHeavyTest extends BaseTest {
     @Parameters
     public static Collection<Object[]> data() {
 
-        return Arrays.asList(new Object[][] { { 2, 5000 }, { 2, 50000 }, { 5, 50000 }, { 10, 50000 }, { 20, 50000 }, });
+	return Arrays.asList(new Object[][] { { 2, 5000 }, { 5, 2000 }, { 10, 1000 }, { 20, 500 }, });
     }
 
     private ExecutorService executor;

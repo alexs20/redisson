@@ -51,24 +51,15 @@ abstract class PublishSubscribe<E extends PubSubEntry<E>> {
     public Future<E> subscribe(String entryName, String channelName, ConnectionManager connectionManager) {
         synchronized (this) {
             E entry = entries.get(entryName);
-            if (entry != null) {
-                entry.aquire();
-                return entry.getPromise();
+            if (entry == null) {
+                Promise<E> newPromise = connectionManager.newPromise();
+                entry = createEntry(newPromise);
+                entries.put(entryName, entry);
+                RedisPubSubListener<Long> listener = createListener(channelName, entry);
+                connectionManager.subscribe(LongCodec.INSTANCE, channelName, listener);
             }
-
-            Promise<E> newPromise = connectionManager.newPromise();
-            E value = createEntry(newPromise);
-            value.aquire();
-
-            E oldValue = entries.putIfAbsent(entryName, value);
-            if (oldValue != null) {
-                oldValue.aquire();
-                return oldValue.getPromise();
-            }
-
-            RedisPubSubListener<Long> listener = createListener(channelName, value);
-            connectionManager.subscribe(LongCodec.INSTANCE, channelName, listener);
-            return newPromise;
+            entry.aquire();
+            return entry.getPromise();
         }
     }
 
