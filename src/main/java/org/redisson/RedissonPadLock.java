@@ -110,26 +110,31 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 
     @Override
     public void lockInterruptibly(long leaseTime, TimeUnit unit, String... ownerKeys) throws InterruptedException {
-	Future<RedissonLockEntry> future = subscribe();
-	get(future);
-	try {
-	    while (true) {
-		Long ttl = tryAcquire(ownerKeys, leaseTime, unit);
-		// lock acquired
-		if (ttl == null) {
-		    break;
-		}
-		if(ttl == -2){ //expired on middle of script execution
-		    //just repeat again
-		} else if (ttl >= 0) { // waiting for message
-		    getEntry().getLatch().tryAcquire(ttl, TimeUnit.MILLISECONDS);
-		} else { //ttl == -1, means permanent lock, should not happen
-		    getEntry().getLatch().acquire();
-		}
-	    }
-	} finally {
-	    unsubscribe(future);
-	}
+        Long ttl = tryAcquire(ownerKeys, leaseTime, unit);
+        // lock acquired
+        if (ttl == null) {
+            return;
+        }
+        Future<RedissonLockEntry> future = subscribe();
+        get(future);
+        try {
+            while (true) {
+                ttl = tryAcquire(ownerKeys, leaseTime, unit);
+                // lock acquired
+                if (ttl == null) {
+                    break;
+                }
+                if (ttl == -2) { // expired on middle of script execution
+                    // just repeat again
+                } else if (ttl >= 0) { // waiting for message
+                    getEntry().getLatch().tryAcquire(ttl, TimeUnit.MILLISECONDS);
+                } else { // ttl == -1, means permanent lock, should not happen
+                    getEntry().getLatch().acquire();
+                }
+            }
+        } finally {
+            unsubscribe(future);
+        }
     }
 
     private Long tryAcquire(String[] ownerKeys, long leaseTime, TimeUnit unit) {

@@ -110,6 +110,11 @@ public class RedissonLock extends RedissonExpirable implements RLock {
 
     @Override
     public void lockInterruptibly(long leaseTime, TimeUnit unit) throws InterruptedException {
+        Long ttl = tryAcquire(leaseTime, unit);
+        // lock acquired
+        if (ttl == null) {
+            return;
+        }
         long threadId = Thread.currentThread().getId();
         Future<RedissonLockEntry> future = subscribe(threadId);
         get(future);
@@ -121,18 +126,18 @@ public class RedissonLock extends RedissonExpirable implements RLock {
                 if (ttl == null) {
                     break;
                 }
-                if(ttl == -2){ //expired on middle of script execution
-                    //just repeat again
+                if (ttl == -2) { // expired on middle of script execution
+                    // just repeat again
                 } else if (ttl >= 0) { // waiting for message
                     getEntry(threadId).getLatch().tryAcquire(ttl, TimeUnit.MILLISECONDS);
-                } else { //ttl == -1, means permanent lock, should not happen
+                } else { // ttl == -1, means permanent lock, should not happen
                     getEntry(threadId).getLatch().acquire();
                 }
             }
         } finally {
             unsubscribe(future, threadId);
         }
-//        get(lockAsync(leaseTime, unit));
+        // get(lockAsync(leaseTime, unit));
     }
     
     private Long tryAcquire(long leaseTime, TimeUnit unit) {
