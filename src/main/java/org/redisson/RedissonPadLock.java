@@ -113,14 +113,8 @@ public class RedissonPadLock extends RedissonExpirable implements RPadLock {
 	Future<RedissonLockEntry> future = subscribe();
 	get(future);
 	try {
-	    Long ttl = tryAcquire(ownerKeys, leaseTime, unit);
-	    // lock acquired
-	    if (ttl == null) {
-		return;
-	    }
-
 	    while (true) {
-		ttl = tryAcquire(ownerKeys, leaseTime, unit);
+		Long ttl = tryAcquire(ownerKeys, leaseTime, unit);
 		// lock acquired
 		if (ttl == null) {
 		    break;
