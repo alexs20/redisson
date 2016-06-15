@@ -121,7 +121,7 @@ public class RedissonLock extends RedissonExpirable implements RLock {
 
         try {
             while (true) {
-                Long ttl = tryAcquire(leaseTime, unit);
+                ttl = tryAcquire(leaseTime, unit);
                 // lock acquired
                 if (ttl == null) {
                     break;
