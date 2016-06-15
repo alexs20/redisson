@@ -23,7 +23,9 @@ public class RedissonPadLockHeavyTest extends BaseTest {
     @Parameters
     public static Collection<Object[]> data() {
 
-        return Arrays.asList(new Object[][] { { 2, 5000 }, { 5, 2000 }, { 10, 1000 }, { 20, 500 }, });
+        return Arrays.asList(new Object[][] { 
+            { 2, 5000 }, { 5, 2000 }, { 10, 1000 }, { 20, 500 }, 
+            { 2, 50000 }, { 5, 20000 }, { 10, 10000 }, { 20, 5000 },});
     }
 
     private ExecutorService executor;
